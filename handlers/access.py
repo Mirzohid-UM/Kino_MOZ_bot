@@ -2,7 +2,7 @@ import time
 import logging
 from aiogram import Router, F, types
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-
+from db import auditj
 from db import grant_access
 
 router = Router()
@@ -61,6 +61,13 @@ async def access_approve(call: types.CallbackQuery):
 
     grant_access(user_id, days=days)
 
+    auditj(
+        actor_id=call.from_user.id,
+        action="grant_access",
+        target_id=user_id,
+        meta_obj={"days": days}
+    )
+
     # Userga xabar
     await call.bot.send_message(
         chat_id=user_id,
@@ -77,7 +84,7 @@ async def access_reject(call: types.CallbackQuery):
 
     _, _, user_id_s = call.data.split(":")
     user_id = int(user_id_s)
-
+    auditj(call.from_user.id, "reject_access", user_id, {})
     await call.bot.send_message(
         chat_id=user_id,
         text="❌ Ruxsat berilmadi. Admin bilan bog‘laning."

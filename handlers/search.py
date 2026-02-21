@@ -1,5 +1,5 @@
 # /home/mozcyber/PythonProject/handlers/search.py
-
+import asyncio
 import time, uuid, logging
 from logging import Logger
 import inspect
@@ -63,17 +63,26 @@ async def search_movie(message: types.Message):
     items = find_top_movies(query)
 
     if not items:
-        await message.answer("❌ Kino topilmadi")
+        kb = InlineKeyboardBuilder()
+        kb.button(text="👤 Adminga yozish", url="https://t.me/Mozcyberr")
+
+        await message.answer(
+            "❌ Kino hali botga qo‘shilmagan yoki nomida adashgansiz.\n"
+            "Adminga murojaat qiling 👇",
+            reply_markup=kb.as_markup()
+        )
         return
 
     if len(items) == 1:
         it = items[0]
         ok = await safe_copy_with_ttl(
             bot=message.bot,
-            chat_id=message.chat.id,
+            chat_id=message.from_user.id,  # ✅ har doim userga
             from_chat_id=it["channel_id"],
             message_id=it["message_id"],
-            ttl_sec=86400
+            ttl_sec=6 * 60 * 60,  # masalan 6 soat
+            protect=True,  # ✅ protect_content urinsin
+            disable_notification=True,  # ixtiyoriy
         )
         if not ok:
             await message.answer("❌ Bu kino kanaldan o‘chirilgan.")
@@ -159,10 +168,12 @@ async def movie_callback(call: types.CallbackQuery):
 
     ok = await safe_copy_with_ttl(
         bot=call.message.bot,
-        chat_id=call.from_user.id,   # har doim userga yuboramiz
+        chat_id=call.from_user.id,
         from_chat_id=channel_id,
         message_id=msg_id,
-        ttl_sec=86400
+        ttl_sec=6 * 60 * 60,  # masalan 6 soat
+        protect=True,
+        disable_notification=True,
     )
 
     if ok:
@@ -171,7 +182,7 @@ async def movie_callback(call: types.CallbackQuery):
 
     # ---- ok=False => source kino o'chgan ----
     # 1) DBdan o'chiramiz
-    await _maybe_await(delete_movie_by_message_id, msg_id, channel_id)
+    await asyncio.to_thread(delete_movie_by_message_id, msg_id, channel_id)
 
     # 2) Cache ro'yxatdan ham o'chiramiz (tugma yo'qolsin)
     items = data.get("items") or []

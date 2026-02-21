@@ -230,12 +230,57 @@ def delete_movie_by_message_id(message_id: int, channel_id: int) -> None:
 
 def get_movies_like(query: str, limit: int = 20):
     conn = _get_conn()
-    q = normalize(query)
-    return conn.execute(
-        "SELECT title, message_id, channel_id FROM movies WHERE title LIKE ? LIMIT ?",
-        (f"%{q}%", int(limit)),
-    ).fetchall()
+    q = normalize(query).strip()
+    if not q:
+        return []
 
+    tokens = [t for t in q.split() if len(t) >= 2]
+    if not tokens:
+        return []
+
+    # ---- 1) EXACT MATCH (eng kuchli prioritet) ----
+    exact = conn.execute(
+        """
+        SELECT title, message_id, channel_id
+        FROM movies
+        WHERE title_norm = ?
+        LIMIT ?
+        """,
+        (" ".join(tokens), limit),
+    ).fetchall()
+    if exact:
+        return exact
+
+    # ---- 2) WORD START MATCH (qora telefon -> qora telefon 2024) ----
+    where_start = " AND ".join(["title_norm LIKE ?"] * len(tokens))
+    params_start = [f"{t}%" for t in tokens] + [limit]
+
+    start_match = conn.execute(
+        f"""
+        SELECT title, message_id, channel_id
+        FROM movies
+        WHERE {where_start}
+        LIMIT ?
+        """,
+        params_start,
+    ).fetchall()
+    if start_match:
+        return start_match
+
+    # ---- 3) CONTAINS MATCH (fallback, lekin tartib bo‘yicha) ----
+    where = " AND ".join(["title_norm LIKE ?"] * len(tokens))
+    params = [f"%{t}%" for t in tokens] + [limit]
+
+    return conn.execute(
+        f"""
+        SELECT title, message_id, channel_id
+        FROM movies
+        WHERE {where}
+        ORDER BY LENGTH(title_norm) ASC
+        LIMIT ?
+        """,
+        params,
+    ).fetchall()
 
 def get_movies_limit(limit: int = 50):
     conn = _get_conn()

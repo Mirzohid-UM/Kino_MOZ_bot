@@ -4,15 +4,19 @@ from aiogram import Bot, Dispatcher
 from handlers import admin_broadcast
 from config import TOKEN, CHANNEL_ID
 from db import init_db
+from utils.sub_notifier import run_sub_expiry_notifier
 
 from dotenv import load_dotenv
 load_dotenv()
+from handlers.admin_subs import router as admin_subs_router
 
 from handlers.admin import router as admin_router
 from handlers.start import router as start_router
 from handlers.access import router as access_router
 from handlers.search import router as search_router
 from handlers.channel import router as channel_router
+
+
 
 # ---------------- LOGGING ----------------
 logging.basicConfig(
@@ -26,6 +30,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 init_db()
+
 async def main():
     bot = Bot(token=TOKEN)
     dp = Dispatcher()
@@ -33,7 +38,7 @@ async def main():
     # Router tartibi:
     # 1) admin komandalar
     dp.include_router(admin_router)
-
+    dp.include_router(admin_subs_router)
     dp.include_router(admin_broadcast.router)
 
     # 2) /start
@@ -57,7 +62,10 @@ async def main():
 
     chat = await bot.get_chat(CHANNEL_ID)
     logger.info(f"Bot started. Kanal: {chat.title} ({chat.id})")
-
+    # bot yaratilgandan keyin, pollingdan oldin:
+    asyncio.create_task(
+        run_sub_expiry_notifier(bot, admin_url="https://t.me/Mozcyberr", interval_sec=600)
+    )
     await dp.start_polling(bot)
 
 
