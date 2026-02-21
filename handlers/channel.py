@@ -2,8 +2,10 @@
 from aiogram import Router, types
 import logging
 import re
-
+import inspect
+import asyncio
 from db import add_movie
+from db import auditj
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -19,15 +21,45 @@ def extract_title(caption: str) -> str:
     first = re.sub(r"\s+", " ", first).strip()
     return first
 
+async def _maybe_await(fn, *args, **kwargs):
+    res = fn(*args, **kwargs)
+    if inspect.isawaitable(res):
+        return await res
+    return res
+
 @router.channel_post()
 async def channel_post_handler(message: types.Message):
+    # faqat kino fayllari (video yoki document) kelganda DBga yozamiz
+    if not (message.video or message.document):
+        return
+
     if not message.caption:
         return
 
-    # video/document shart emas — caption bo‘lsa yetadi
     title = extract_title(message.caption)
     if not title:
         return
 
-    add_movie(title=title, message_id=message.message_id, channel_id=message.chat.id)
+    title = title[:150]  # optional safety
+
+    await asyncio.to_thread(
+        add_movie,
+        title=title,
+        message_id=message.message_id,
+        channel_id=message.chat.id,
+    )
+    try:
+        auditj(
+            actor_id=0,
+            action="add_movie",
+            target_id=message.message_id,
+            meta_obj={
+                "channel_id": message.chat.id,
+                "message_id": message.message_id,
+                "title": title,
+            }
+        )
+    except Exception:
+        logger.exception("audit add_movie failed")
+
     logger.info("Added movie: %r (channel=%s msg=%s)", title, message.chat.id, message.message_id)
