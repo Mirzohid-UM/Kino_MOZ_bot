@@ -1,3 +1,5 @@
+from dotenv import load_dotenv
+load_dotenv()
 import asyncio
 import logging
 from aiogram import Bot, Dispatcher
@@ -6,8 +8,7 @@ from config import TOKEN, CHANNEL_ID
 from db import init_db
 from utils.sub_notifier import run_sub_expiry_notifier
 
-from dotenv import load_dotenv
-load_dotenv()
+
 from handlers.admin_subs import router as admin_subs_router
 
 from handlers.admin import router as admin_router

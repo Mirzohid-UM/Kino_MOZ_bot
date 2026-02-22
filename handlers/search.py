@@ -7,7 +7,8 @@ from aiogram import Router, F, types
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.exceptions import TelegramBadRequest
 from utils.copy import safe_copy_with_ttl
-
+from config import CHANNEL_ID
+import re
 from db import delete_movie_by_message_id, has_access
 from service.search import find_top_movies
 
@@ -17,6 +18,7 @@ logger: Logger = logging.getLogger(__name__)
 PAGE_SIZE = 5
 CACHE_TTL = 10 * 60
 SEARCH_CACHE: dict[str, dict] = {}
+from_chat_id=CHANNEL_ID,
 
 def _cleanup_cache():
     now = time.time()
@@ -36,8 +38,8 @@ def build_keyboard(token: str, page: int, items: list[dict]) -> types.InlineKeyb
     end = start + PAGE_SIZE
     for it in items[start:end]:
         builder.button(
-            text=it["title"],
-            callback_data=f"movie:{token}:{it['channel_id']}:{it['message_id']}"
+            text=_btn_text(it.get("title", "")),
+            callback_data=f"movie:{token}:{it['message_id']}"
         )
 
     nav = InlineKeyboardBuilder()
@@ -59,9 +61,16 @@ async def search_movie(message: types.Message):
         return
 
     _cleanup_cache()
-    query = message.text
-    items = find_top_movies(query)
+    query = (message.text or "").strip()
+    if len(query) > 80 or "\n" in query:
+        await message.answer("🔎 Faqat kino nomini qisqa qilib yozing (masalan: `Shazam` yoki `Sevgi ortidan 7`).")
+        return
+    m = re.match(r"^(.*?)(?:\s+(\d{1,3}))?$", query)
+    base = (m.group(1) or "").strip() if m else query
+    episode = m.group(2) if m else None  # None yoki "7"
 
+    # 3) Qidiruvni faqat base bo‘yicha qilamiz
+    items = find_top_movies(base)
     if not items:
         kb = InlineKeyboardBuilder()
         kb.button(text="👤 Adminga yozish", url="https://t.me/Mozcyberr")
@@ -153,9 +162,9 @@ async def movie_callback(call: types.CallbackQuery):
 
     # movie:{token}:{channel_id}:{message_id}
     try:
-        _, token, ch_s, msg_s = call.data.split(":", 3)
-        channel_id = int(ch_s)
+        _, token, msg_s = call.data.split(":", 2)
         msg_id = int(msg_s)
+
     except Exception:
         await call.answer("Callback ma’lumoti buzilgan. Qayta qidirib ko‘ring.", show_alert=True)
         return
@@ -169,7 +178,7 @@ async def movie_callback(call: types.CallbackQuery):
     ok = await safe_copy_with_ttl(
         bot=call.message.bot,
         chat_id=call.from_user.id,
-        from_chat_id=channel_id,
+        from_chat_id=CHANNEL_ID,
         message_id=msg_id,
         ttl_sec=6 * 60 * 60,  # masalan 6 soat
         protect=True,
@@ -182,13 +191,13 @@ async def movie_callback(call: types.CallbackQuery):
 
     # ---- ok=False => source kino o'chgan ----
     # 1) DBdan o'chiramiz
-    await asyncio.to_thread(delete_movie_by_message_id, msg_id, channel_id)
+    await asyncio.to_thread(delete_movie_by_message_id, msg_id, CHANNEL_ID,)
 
     # 2) Cache ro'yxatdan ham o'chiramiz (tugma yo'qolsin)
     items = data.get("items") or []
     data["items"] = [
         it for it in items
-        if not (int(it.get("message_id", -1)) == msg_id and int(it.get("channel_id", -1)) == channel_id)
+        if not (int(it.get("message_id", -1)) == msg_id and int(it.get("channel_id", -1)) == CHANNEL_ID)
     ]
 
     # 3) UI yangilash

@@ -1,6 +1,7 @@
 # /home/mozcyber/PythonProject/service/search.py
 from rapidfuzz import process, fuzz
-from db import get_movies_like, get_movies_limit, normalize
+from db import get_movies_like, get_movies_limit
+from db.core import normalize
 import logging
 
 logger = logging.getLogger(__name__)
@@ -31,9 +32,29 @@ def find_top_movies(query: str, limit: int = 30, score_cutoff: int = 70):
     # --- SHORT QUERY GUARD (tor -> doktor muammosini kesadi) ---
     tokens = qn.split()
     if len(tokens) == 1 and len(tokens[0]) < 4:
-        # Fuzzy ishlatmaymiz, faqat DB natijalarini qaytaramiz
+        needle = tokens[0]
+
+        exact = []
+        word_prefix = []
+        rest = []
+
+        for row in candidates:
+            t = _row_title(row) or ""
+            tn = normalize(t).strip()
+            words = tn.split()
+
+            if tn == needle:
+                exact.append(row)
+            elif any(w == needle or w.startswith(needle) for w in words):
+                # faqat so'zlar bo'yicha prefix/exact
+                word_prefix.append(row)
+            else:
+                rest.append(row)
+
+        ordered = exact + word_prefix + rest
+
         out = []
-        for row in candidates[:limit]:
+        for row in ordered[:limit]:
             out.append({
                 "title": _row_title(row),
                 "message_id": int(_row_mid(row)),
@@ -41,7 +62,6 @@ def find_top_movies(query: str, limit: int = 30, score_cutoff: int = 70):
                 "score": 100,
             })
         return out
-
     # Fuzzy uchun titles
     titles = [_row_title(r) for r in candidates]
 
