@@ -1,8 +1,5 @@
 cat > .gitignore <<'EOF'
 .env
-*.db
-*.db-shm
-*.db-wal
 *.bak*
 *.log
 __pycache__/
