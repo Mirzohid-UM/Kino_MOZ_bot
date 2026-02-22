@@ -5,16 +5,20 @@ from .core import get_conn, normalize
 
 def add_movie(title: str, message_id: int, channel_id: int) -> None:
     conn = get_conn()
-    t = normalize(title)
+    raw = (title or "").strip()
+    norm = normalize(raw)
     now = int(time.time())
-    conn.execute("""
-        INSERT INTO movies (channel_id, title, message_id, created_at)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(channel_id, message_id)
-        DO UPDATE SET title=excluded.title
-    """, (int(channel_id), t, int(message_id), now))
-    conn.commit()
 
+    conn.execute("""
+        INSERT INTO movies (channel_id, title, title_raw, title_norm, message_id, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(channel_id, message_id)
+        DO UPDATE SET
+            title=excluded.title,
+            title_raw=excluded.title_raw,
+            title_norm=excluded.title_norm
+    """, (int(channel_id), raw, raw, norm, int(message_id), now))
+    conn.commit()
 def delete_movie_by_message_id(message_id: int, channel_id: int) -> None:
     conn = get_conn()
     conn.execute(
@@ -33,43 +37,48 @@ def get_movies_like(query: str, limit: int = 20):
     if not tokens:
         return []
 
-    # 1) exact
+    # 1️⃣ EXACT PHRASE (eng kuchli)
     exact = conn.execute(
         """
-        SELECT title, message_id, channel_id
+        SELECT COALESCE(title_raw, title) AS title, message_id, channel_id
         FROM movies
-        WHERE title = ?
+        WHERE ' ' || title_norm || ' ' LIKE '% ' || :q || ' %'
         LIMIT ?
         """,
-        (" ".join(tokens), int(limit)),
+        (q, int(limit)),
     ).fetchall()
     if exact:
         return exact
 
-    # 2) startswith for each token
-    where_start = " AND ".join(["title LIKE ?"] * len(tokens))
-    params_start = [f"{t}%" for t in tokens] + [int(limit)]
-    start_match = conn.execute(
-        f"""
-        SELECT title, message_id, channel_id
-        FROM movies
-        WHERE {where_start}
-        LIMIT ?
-        """,
-        params_start,
-    ).fetchall()
-    if start_match:
-        return start_match
+    # 2️⃣ WORD-START MATCH (so‘z boshidan mos)
+    where = " AND ".join(
+        ["' ' || title_norm || ' ' LIKE ?"] * len(tokens)
+    )
+    params = [f"% {t}%" for t in tokens] + [int(limit)]
 
-    # 3) contains
-    where = " AND ".join(["title LIKE ?"] * len(tokens))
-    params = [f"%{t}%" for t in tokens] + [int(limit)]
-    return conn.execute(
+    word_start = conn.execute(
         f"""
-        SELECT title, message_id, channel_id
+        SELECT COALESCE(title_raw, title) AS title, message_id, channel_id
         FROM movies
         WHERE {where}
-        ORDER BY LENGTH(title) ASC
+        ORDER BY LENGTH(title_norm) ASC
+        LIMIT ?
+        """,
+        params,
+    ).fetchall()
+    if word_start:
+        return word_start
+
+    # 3️⃣ CONTAINS fallback (oxirgi chora)
+    where = " AND ".join(["title_norm LIKE ?"] * len(tokens))
+    params = [f"%{t}%" for t in tokens] + [int(limit)]
+
+    return conn.execute(
+        f"""
+        SELECT COALESCE(title_raw, title) AS title, message_id, channel_id
+        FROM movies
+        WHERE {where}
+        ORDER BY LENGTH(title_norm) ASC
         LIMIT ?
         """,
         params,
@@ -78,6 +87,11 @@ def get_movies_like(query: str, limit: int = 20):
 def get_movies_limit(limit: int = 50):
     conn = get_conn()
     return conn.execute(
-        "SELECT title, message_id, channel_id FROM movies ORDER BY id DESC LIMIT ?",
+        """
+        SELECT COALESCE(title_raw, title) AS title, message_id, channel_id
+        FROM movies
+        ORDER BY id DESC
+        LIMIT ?
+        """,
         (int(limit),),
     ).fetchall()

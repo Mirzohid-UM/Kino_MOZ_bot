@@ -4,6 +4,9 @@ import logging
 import datetime
 from db import last_audit,list_active_users,count_users, count_active_subs
 
+from db import extend_access, audit  # ✅ importlarni qo'shing
+import datetime
+
 router = Router()
 logger = logging.getLogger(__name__)
 
@@ -41,30 +44,6 @@ async def grant_cmd(message: types.Message):
 
     await message.answer(f"✅ Access berildi: user_id={user_id}, days={days}\nTekshiruv: {ok}")
     logger.info(f"Access granted by admin={message.from_user.id} to user={user_id} days={days}")
-
-
-@router.message(F.text == "/users")
-async def users_cmd(message: types.Message):
-    if message.from_user.id not in ADMIN_IDS:
-        return
-
-    rows = list_active_users(limit=30)
-    if not rows:
-        await message.answer("Hozir aktiv user yo‘q.")
-        return
-
-    lines = ["👥 Aktiv userlar (muddat tugash bo‘yicha):\n"]
-    for r in rows:
-        user_id = r["user_id"]
-        exp = r["expires_at"]
-        dt = datetime.datetime.fromtimestamp(exp)
-        lines.append(f"- {user_id}  |  {dt:%Y-%m-%d %H:%M}")
-
-    await message.answer("\n".join(lines))
-
-
-from db import extend_access, audit  # ✅ importlarni qo'shing
-import datetime
 
 @router.message(F.text.startswith("/renew"))
 async def renew_cmd(message: types.Message):
@@ -104,25 +83,6 @@ async def renew_cmd(message: types.Message):
     except Exception as e:
         logger.exception(f"Renew failed: {e}")
         await message.answer("❌ Renew qilishda xatolik. Logni tekshiring.")
-
-
-@router.message(F.text == "/audit")
-async def audit_cmd(message: types.Message):
-    if message.from_user.id not in ADMIN_IDS:
-        return
-
-    rows = last_audit(20)
-    if not rows:
-        await message.answer("Audit bo‘sh.")
-        return
-
-    lines = ["🧾 So‘nggi audit (20 ta):\n"]
-    for actor_id, action, target_id, meta, ts in rows:
-        dt = datetime.datetime.fromtimestamp(ts)
-        lines.append(f"{dt:%Y-%m-%d %H:%M} | {actor_id} | {action} | target={target_id} | {meta}")
-
-    await message.answer("\n".join(lines))
-
 
 @router.message(F.text == "/admin")
 async def admin_panel(message: types.Message):

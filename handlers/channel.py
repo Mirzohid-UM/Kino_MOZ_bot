@@ -11,15 +11,31 @@ router = Router()
 logger = logging.getLogger(__name__)
 
 _HASHTAG = re.compile(r"#\w+", re.UNICODE)
+_NOISE_LINE = re.compile(r"^(?:[-–—•·\s]+|➖+|$)$")
+_BAD_TITLE  = re.compile(r"^\s*(\d+)\s*(mkv|mp4|avi|mov)\s*$", re.I)
 
 def extract_title(caption: str) -> str:
     caption = (caption or "").strip()
     if not caption:
         return ""
-    first = caption.splitlines()[0].strip()
-    first = _HASHTAG.sub("", first).strip()
-    first = re.sub(r"\s+", " ", first).strip()
-    return first
+
+    for line in caption.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if _NOISE_LINE.match(line):
+            continue
+
+        line = _HASHTAG.sub("", line).strip()
+        line = re.sub(r"\s+", " ", line).strip()
+
+        # "3 mkv" / "2 mp4" kabi bo'lsa qabul qilmaymiz
+        if _BAD_TITLE.match(line):
+            continue
+
+        return line
+
+    return ""
 
 async def _maybe_await(fn, *args, **kwargs):
     res = fn(*args, **kwargs)
