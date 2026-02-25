@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 async def main():
     # DB initlar pollingdan oldin
-    await init_pool(DATABASE_URL, min_size=1, max_size=10)
+    await init_pool(min_size=1, max_size=10)
     await init_db()
 
 
