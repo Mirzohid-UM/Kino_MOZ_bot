@@ -10,7 +10,7 @@ from typing import Any, Dict, List
 from aiogram import Router, F, types
 from aiogram.filters import Command
 
-from db.access import get_expires_at, list_active_users_with_profiles
+from db.access import get_expiring_between, was_notified, mark_notified
 
 router = Router()
 logger = logging.getLogger(__name__)
