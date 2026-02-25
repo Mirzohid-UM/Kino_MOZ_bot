@@ -58,7 +58,7 @@ async def run_sub_expiry_notifier(bot, *, admin_url: str, interval_sec: int = 60
             d1_end = now + 1 * 86400 + 1800
 
             for kind, start_ts, end_ts in (("d3", d3_start, d3_end), ("d1", d1_start, d1_end)):
-                rows = await get_expiring_between(ts_from=start_ts, ts_to=end_ts, limit=2000)  # ✅ await
+                rows = await get_expiring_between(start_ts, end_ts, limit=2000) # ✅ await
 
                 for r in rows:
                     user_id = int(r["user_id"])
