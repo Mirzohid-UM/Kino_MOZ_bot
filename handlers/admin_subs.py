@@ -10,7 +10,7 @@ from typing import Any, Dict, List
 from aiogram import Router, F, types
 from aiogram.filters import Command
 
-from db.access import get_expiring_between, was_notified, mark_notified
+from db.access import get_expiring_between, was_notified, mark_notified,list_active_users_with_profiles
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -143,7 +143,7 @@ async def sub_info(call: types.CallbackQuery):
     now = int(time.time())
 
     # ✅ asyncpg: conn yo‘q, %s yo‘q
-    exp = await get_expires_at(user_id)
+    exp = await get_expiring_between(user_id)
 
     if not exp:
         await call.answer("Sizda hozir obuna yo‘q.", show_alert=True)
