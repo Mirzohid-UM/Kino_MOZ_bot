@@ -152,7 +152,7 @@ async def sub_info(call: types.CallbackQuery):
     now = int(time.time())
 
     row = conn.execute(
-        "SELECT expires_at FROM user_access WHERE user_id=?",
+        "SELECT expires_at FROM user_access WHERE user_id=%s",
         (int(user_id),),
     ).fetchone()
 
