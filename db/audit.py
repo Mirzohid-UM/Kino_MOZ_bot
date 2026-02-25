@@ -4,8 +4,8 @@ from __future__ import annotations
 import time
 import json
 from typing import Any, Dict, List, Optional, Union
-
 from db.core import get_pool
+
 
 MetaType = Optional[Union[str, Dict[str, Any], List[Any], int, float, bool]]
 
@@ -43,20 +43,6 @@ def _normalize_meta(meta: MetaType) -> Any:
     except Exception:
         return {"text": str(meta)}
 
-async def auditj(*, actor_id: int, action: str, target_id: Optional[int] = None, meta: MetaType = None) -> None:
-    now = int(time.time())
-    meta_obj = _normalize_meta(meta)
-
-    pool = get_pool()
-    async with pool.acquire() as conn:
-        await conn.execute(
-            """
-            INSERT INTO audit_log (actor_id, action, target_id, meta, created_at)
-            VALUES ($1, $2, $3, $4::jsonb, $5)
-            """,
-            int(actor_id), str(action), target_id, meta_obj, now
-        )
-
 async def last_audit(limit: int = 20) -> List[Dict[str, Any]]:
     pool = get_pool()
     async with pool.acquire() as conn:
@@ -70,3 +56,22 @@ async def last_audit(limit: int = 20) -> List[Dict[str, Any]]:
             int(limit),
         )
     return [dict(r) for r in rows]
+
+
+async def auditj(*, actor_id: int, action: str, target_id: Optional[int] = None, meta: MetaType = None) -> None:
+    now = int(time.time())
+    meta_obj = _normalize_meta(meta)
+
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO audit_log (actor_id, action, target_id, meta, created_at)
+            VALUES ($1, $2, $3, $4::jsonb, $5)
+            """,
+            int(actor_id),
+            str(action),
+            target_id,
+            json.dumps(meta_obj, ensure_ascii=False),  # 👈 shu muhim joy
+            now
+        )
