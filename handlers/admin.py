@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import datetime
-
+from utils.search_cache import SEARCH_CACHE
 from aiogram import Router, F, types
 
 from db.access import grant_access, extend_access, has_access, count_active_subs
@@ -126,3 +126,16 @@ async def admin_panel(message: types.Message):
         "- /extend <id> [days]\n"
         "- /subs"
     )
+
+@router.message(F.text == "/clearcache")
+async def clear_cache_cmd(message: types.Message):
+    if message.from_user.id not in ADMIN_IDS:
+        return
+    SEARCH_CACHE.clear()
+    await message.answer("✅ Search cache tozalandi.")
+
+@router.message(F.text == "/cacheinfo")
+async def cache_info_cmd(message: types.Message):
+    if message.from_user.id not in ADMIN_IDS:
+        return
+    await message.answer(f"📦 SEARCH_CACHE keys: {len(SEARCH_CACHE)}")

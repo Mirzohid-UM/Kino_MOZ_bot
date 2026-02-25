@@ -6,7 +6,7 @@ import re
 
 from db.movies import add_movie_with_aliases
 from db.audit import auditj
-
+from utils.search_cache import SEARCH_CACHE
 router = Router()
 logger = logging.getLogger(__name__)
 
@@ -66,6 +66,7 @@ async def channel_post_handler(message: types.Message):
         message_id=message.message_id,
         channel_id=message.chat.id,
     )
+    SEARCH_CACHE.clear()
 
     try:
         await auditj(
