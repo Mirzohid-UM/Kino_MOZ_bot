@@ -1,4 +1,7 @@
-from dotenv import load_dotenv
+rom
+dotenv
+import load_dotenv
+
 load_dotenv()
 import asyncio
 import logging
@@ -8,6 +11,9 @@ from config import TOKEN, CHANNEL_ID
 from db import init_db
 from utils.sub_notifier import run_sub_expiry_notifier
 
+from aiogram import Dispatcher
+from db.core import init_pool
+from config import DATABASE_URL
 
 from handlers.admin_subs import router as admin_subs_router
 
@@ -16,8 +22,6 @@ from handlers.start import router as start_router
 from handlers.access import router as access_router
 from handlers.search import router as search_router
 from handlers.channel import router as channel_router
-
-
 
 # ---------------- LOGGING ----------------
 logging.basicConfig(
@@ -31,6 +35,11 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 init_db()
+
+
+async def on_startup(dispatcher: Dispatcher):
+    await init_pool(DATABASE_URL, min_size=1, max_size=10)
+
 
 async def main():
     bot = Bot(token=TOKEN)

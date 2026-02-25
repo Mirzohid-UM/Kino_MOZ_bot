@@ -1,13 +1,16 @@
+# handlers/admin_subs.py
+from __future__ import annotations
+
 import time
 import logging
 from datetime import datetime
 from zoneinfo import ZoneInfo
+from typing import Any, Dict, List
 
 from aiogram import Router, F, types
 from aiogram.filters import Command
 
-from db import list_active_users_with_profiles
-from db.core import get_conn  # sub:info uchun
+from db.access import get_expires_at, list_active_users_with_profiles
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -32,15 +35,14 @@ def _remains(expires_at: int) -> str:
     return f"{h}h {m}m"
 
 
-def _who_row(r) -> str:
+def _who_row(r: Dict[str, Any]) -> str:
     user_id = int(r["user_id"])
-    uname = (r["username"] or "").strip()
-    fname = (r["full_name"] or "").strip()
+    uname = (r.get("username") or "").strip()
+    fname = (r.get("full_name") or "").strip()
 
     label = fname if fname else str(user_id)
     if uname:
         label = f"{label} (@{uname})"
-    # IDni ham ko‘rsatib qo‘yamiz (admin uchun qulay)
     if str(user_id) not in label:
         label = f"{label} | ID: {user_id}"
     return label
@@ -52,13 +54,15 @@ async def subs_cmd(message: types.Message):
         return
 
     now = int(time.time())
-    rows = list_active_users_with_profiles(limit=5000)
+
+    # ✅ endi async
+    rows = await list_active_users_with_profiles(limit=5000, now=now)
 
     # bucketlar
-    b_48h = []
-    b_3d = []
-    b_7d = []
-    b_after = []
+    b_48h: List[Dict[str, Any]] = []
+    b_3d: List[Dict[str, Any]] = []
+    b_7d: List[Dict[str, Any]] = []
+    b_after: List[Dict[str, Any]] = []
 
     for r in rows:
         exp = int(r["expires_at"])
@@ -73,40 +77,30 @@ async def subs_cmd(message: types.Message):
         else:
             b_after.append(r)
 
-    lines = []
+    # tartiblash (yaxshi ko‘rinadi)
+    b_48h.sort(key=lambda x: int(x["expires_at"]))
+    b_3d.sort(key=lambda x: int(x["expires_at"]))
+    b_7d.sort(key=lambda x: int(x["expires_at"]))
+    b_after.sort(key=lambda x: int(x["expires_at"]))
+
+    lines: List[str] = []
     lines.append(f"👥 Aktiv obunachilar: {len(rows)} ta")
     lines.append(f"🕒 Hisobot vaqti: {_fmt_ts(now)} ({TZ_LABEL})")
     lines.append("")
 
-    # 48h
-    lines.append(f"🚨 48 soat ichida tugaydi ({len(b_48h)} ta):")
-    if not b_48h:
-        lines.append("— yo‘q")
-    else:
-        for i, r in enumerate(b_48h, 1):
-            exp = int(r["expires_at"])
-            lines.append(f"{i}) {_who_row(r)} — {_fmt_ts(exp)} (qoldi: {_remains(exp)})")
-    lines.append("")
+    def add_bucket(title: str, bucket: List[Dict[str, Any]]):
+        lines.append(f"{title} ({len(bucket)} ta):")
+        if not bucket:
+            lines.append("— yo‘q")
+        else:
+            for i, r in enumerate(bucket, 1):
+                exp = int(r["expires_at"])
+                lines.append(f"{i}) {_who_row(r)} — {_fmt_ts(exp)} (qoldi: {_remains(exp)})")
+        lines.append("")
 
-    # 3d
-    lines.append(f"⚠️ 3 kun ichida tugaydi ({len(b_3d)} ta):")
-    if not b_3d:
-        lines.append("— yo‘q")
-    else:
-        for i, r in enumerate(b_3d, 1):
-            exp = int(r["expires_at"])
-            lines.append(f"{i}) {_who_row(r)} — {_fmt_ts(exp)} (qoldi: {_remains(exp)})")
-    lines.append("")
-
-    # 7d
-    lines.append(f"⏳ 7 kun ichida tugaydi ({len(b_7d)} ta):")
-    if not b_7d:
-        lines.append("— yo‘q")
-    else:
-        for i, r in enumerate(b_7d, 1):
-            exp = int(r["expires_at"])
-            lines.append(f"{i}) {_who_row(r)} — {_fmt_ts(exp)} (qoldi: {_remains(exp)})")
-    lines.append("")
+    add_bucket("🚨 48 soat ichida tugaydi", b_48h)
+    add_bucket("⚠️ 3 kun ichida tugaydi", b_3d)
+    add_bucket("⏳ 7 kun ichida tugaydi", b_7d)
 
     # after 7d (faqat summary)
     lines.append(f"✅ 7 kundan keyin ({len(b_after)} ta):")
@@ -125,13 +119,12 @@ async def subs_cmd(message: types.Message):
 
     text = "\n".join(lines)
 
-    # Telegram limit: 4096. Agar juda uzun bo‘lsa, ikkiga bo‘lib yuboramiz.
+    # Telegram limit: 4096 (xavfsiz 3900)
     if len(text) <= 3900:
         await message.answer(text)
         return
 
-    # split
-    chunk = []
+    chunk: List[str] = []
     cur = 0
     for line in lines:
         if cur + len(line) + 1 > 3900:
@@ -146,21 +139,17 @@ async def subs_cmd(message: types.Message):
 
 @router.callback_query(F.data == "sub:info")
 async def sub_info(call: types.CallbackQuery):
-    # foydalanuvchining o'z obunasi haqida
     user_id = call.from_user.id
-    conn = get_conn()
     now = int(time.time())
 
-    row = conn.execute(
-        "SELECT expires_at FROM user_access WHERE user_id=%s",
-        (int(user_id),),
-    ).fetchone()
+    # ✅ asyncpg: conn yo‘q, %s yo‘q
+    exp = await get_expires_at(user_id)
 
-    if not row:
+    if not exp:
         await call.answer("Sizda hozir obuna yo‘q.", show_alert=True)
         return
 
-    exp = int(row["expires_at"])
+    exp = int(exp)
     if exp <= now:
         await call.answer("Obunangiz tugagan. Adminga yozing.", show_alert=True)
         return

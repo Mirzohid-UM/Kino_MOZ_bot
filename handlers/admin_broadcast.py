@@ -3,12 +3,13 @@ import logging
 from aiogram import Router, F, types
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 
-from db import list_active_user_ids
+from db.access import list_active_user_ids
 
 router = Router()
 log = logging.getLogger(__name__)
 
-ADMIN_ID = 7040085454  # o'zing
+ADMIN_ID = 7040085454
+
 
 @router.message(F.text == "/post")
 async def broadcast_post(message: types.Message):
@@ -20,7 +21,9 @@ async def broadcast_post(message: types.Message):
         return
 
     src = message.reply_to_message
-    user_ids = list_active_user_ids()
+
+    # ✅ async DB chaqiruv
+    user_ids = await list_active_user_ids()
 
     if not user_ids:
         await message.answer("Aktiv obunachilar topilmadi.")
@@ -31,7 +34,6 @@ async def broadcast_post(message: types.Message):
 
     status = await message.answer(f"📣 Yuborilyapti... 0/{len(user_ids)}")
 
-    # Telegram limitlar uchun: 20 msg/sec atrofida xavfsiz
     for i, uid in enumerate(user_ids, start=1):
         try:
             await message.bot.copy_message(
@@ -40,18 +42,18 @@ async def broadcast_post(message: types.Message):
                 message_id=src.message_id,
             )
             sent += 1
+
         except (TelegramForbiddenError, TelegramBadRequest):
-            # user botni bloklagan, chat yo'q, va hokazo
             failed += 1
+
         except Exception as e:
             failed += 1
             log.exception("broadcast error uid=%s err=%s", uid, e)
 
-        # throttling
+        # throttle
         if i % 20 == 0:
             await asyncio.sleep(1)
 
-        # progress update (har 50 tadan)
         if i % 50 == 0 or i == len(user_ids):
             try:
                 await status.edit_text(f"📣 Yuborilyapti... {i}/{len(user_ids)}")
