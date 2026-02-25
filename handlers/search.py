@@ -1,5 +1,6 @@
 # handlers/search.py
 import time, uuid, logging, re
+from utils.search_cache import SEARCH_CACHE
 from logging import Logger
 from aiogram import Router, F, types
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -108,8 +109,9 @@ async def search_movie(message: types.Message):
             disable_notification=True,
         )
         if not ok:
+            await delete_movie_by_message_id(int(it["message_id"]), int(it["channel_id"]))
             await message.answer("❌ Bu kino kanaldan o‘chirilgan.")
-        return
+            return
 
     token = uuid.uuid4().hex[:10]
     SEARCH_CACHE[token] = {"user_id": message.from_user.id, "items": items, "ts": time.time()}
