@@ -3,7 +3,8 @@ import logging
 from aiogram import Router, F, types
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from db import auditj
-from db import grant_access
+from db.core import get_pool
+from db.access import grant_access
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -90,3 +91,23 @@ async def access_reject(call: types.CallbackQuery):
         text="❌ Ruxsat berilmadi. Admin bilan bog‘laning."
     )
     await call.answer("Rad etildi.", show_alert=True)
+
+async def list_active_users_with_profiles(*, limit: int = 5000, now: Optional[int] = None) -> List[Dict[str, Any]]:
+    if now is None:
+        import time
+        now = int(time.time())
+
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT ua.user_id, ua.expires_at, u.username, u.full_name
+            FROM user_access ua
+            LEFT JOIN users u ON u.user_id = ua.user_id
+            WHERE ua.expires_at > $1
+            ORDER BY ua.expires_at ASC
+            LIMIT $2
+            """,
+            int(now), int(limit)
+        )
+    return [dict(r) for r in rows]

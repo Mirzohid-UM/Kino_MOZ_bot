@@ -1,4 +1,4 @@
-# /home/mozcyber/PythonProject/handlers/search.py
+# handlers/search.py
 import time, uuid, logging, re
 from logging import Logger
 from aiogram import Router, F, types
@@ -7,8 +7,10 @@ from aiogram.exceptions import TelegramBadRequest
 
 from utils.copy import safe_copy_with_ttl
 from config import CHANNEL_ID
-from db import delete_movie_by_message_id, has_access
-from service.search import find_top_movies, extract_episode
+
+from db.movies import delete_movie_by_message_id   # ✅ db/__init__ emas, toza moduldan
+from db.access import has_access                   # ✅ async bo'ladi
+from service.search import find_top_movies, extract_episode  # ✅ bu sync qoladi
 
 router = Router()
 logger: Logger = logging.getLogger(__name__)
@@ -39,7 +41,7 @@ def build_keyboard(token: str, page: int, items: list[dict]) -> types.InlineKeyb
     for it in items[start:end]:
         builder.button(
             text=_btn_text(it.get("title", "")),
-            callback_data=f"movie:{token}:{it['message_id']}"  # movie:{token}:{message_id}
+            callback_data=f"movie:{token}:{it['message_id']}"
         )
 
     nav = InlineKeyboardBuilder()
@@ -56,7 +58,8 @@ def build_keyboard(token: str, page: int, items: list[dict]) -> types.InlineKeyb
 
 @router.message(F.text & ~F.text.startswith("/"))
 async def search_movie(message: types.Message):
-    if not has_access(message.from_user.id):
+    # ✅ has_access endi async
+    if not await has_access(message.from_user.id):
         await message.answer("⛔ Sizda ruxsat yo‘q. Admin bilan bog‘laning.")
         return
 
@@ -64,19 +67,17 @@ async def search_movie(message: types.Message):
 
     query = (message.text or "").strip()
     if len(query) > 80 or "\n" in query:
-        await message.answer(
-            "🔎 Faqat kino nomini qisqa qilib yozing (masalan: `Shazam` yoki `Sevgi ortidan 7`)."
-        )
+        await message.answer("🔎 Faqat kino nomini qisqa qilib yozing (masalan: `Shazam`).")
         return
 
-    # user "Sevgi ortidan 7" deb yozsa -> base="Sevgi ortidan", episode="7"
+    # "Sevgi ortidan 7" -> base + episode
     m = re.match(r"^(.*?)(?:\s+(\d{1,3}))?$", query)
     base = (m.group(1) or "").strip() if m else query
     episode = m.group(2) if m else None
 
-    items = find_top_movies(base)         # ✅
+    # ✅ find_top_movies sync qoladi (await QO'YMAYSIZ)
+    items = await find_top_movies(base)
 
-    # Agar ep berilgan bo'lsa, mos epni oldinga olib chiqamiz
     if items and episode:
         epn = int(episode)
 
@@ -90,13 +91,11 @@ async def search_movie(message: types.Message):
         kb = InlineKeyboardBuilder()
         kb.button(text="👤 Adminga yozish", url="https://t.me/Mozcyberr")
         await message.answer(
-            "❌ Kino hali botga qo‘shilmagan yoki nomida adashgansiz.\n"
-            "Adminga murojaat qiling 👇",
+            "❌ Kino hali botga qo‘shilmagan yoki nomida adashgansiz.\nAdminga murojaat qiling 👇",
             reply_markup=kb.as_markup()
         )
         return
 
-    # 1 ta natija bo'lsa darrov chiqaramiz
     if len(items) == 1:
         it = items[0]
         ok = await safe_copy_with_ttl(
@@ -168,7 +167,6 @@ async def movie_callback(call: types.CallbackQuery):
         await call.answer("Bu tugma eskirgan. Qaytadan qidirib ko‘ring.", show_alert=True)
         return
 
-    # movie:{token}:{message_id}
     try:
         _, token, msg_s = call.data.split(":", 2)
         msg_id = int(msg_s)
@@ -195,21 +193,23 @@ async def movie_callback(call: types.CallbackQuery):
         await call.answer()
         return
 
-    # ---- source o'chgan bo'lsa ----
-    # 1) DBdan o'chiramiz (Postgres async)
+    # source o'chgan bo'lsa: DBdan o'chiramiz (async)
     try:
         await delete_movie_by_message_id(msg_id, CHANNEL_ID)
     except Exception:
         logger.exception("delete_movie_by_message_id failed")
 
-    # 2) Cache dan ham olib tashlaymiz
+    # cache dan olib tashlash
     items = data.get("items") or []
     data["items"] = [
         it for it in items
-        if not (int(it.get("message_id", -1)) == msg_id and int(it.get("channel_id", -1)) == CHANNEL_ID)
+        if not (
+            int(it.get("message_id", -1)) == msg_id and
+            int(it.get("channel_id", -1)) == CHANNEL_ID
+        )
     ]
 
-    # 3) UI yangilaymiz
+    # UI update
     try:
         if not data["items"]:
             await call.message.edit_text("Bu ro‘yxatdagi kinolar endi mavjud emas.")
