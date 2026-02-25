@@ -109,7 +109,10 @@ async def search_movie(message: types.Message):
             disable_notification=True,
         )
         if not ok:
-            await delete_movie_by_message_id(int(it["message_id"]), int(it["channel_id"]))
+            await delete_movie_by_message_id(
+                message_id=int(it["message_id"]),
+                channel_id=int(it["channel_id"]),
+            )
             await message.answer("❌ Bu kino kanaldan o‘chirilgan.")
             return
 
