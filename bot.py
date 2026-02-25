@@ -35,6 +35,7 @@ async def main():
     await init_pool(DATABASE_URL, min_size=1, max_size=10)
     await init_db()
 
+
     bot = Bot(token=TOKEN)
     dp = Dispatcher()
 
