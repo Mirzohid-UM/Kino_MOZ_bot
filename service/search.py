@@ -1,7 +1,7 @@
 # /home/mozcyber/PythonProject/service/search.py
 from rapidfuzz import process, fuzz
 from db import get_movies_like, get_movies_limit
-from db.core import normalize
+from db.utils import normalize
 import logging
 
 import re
