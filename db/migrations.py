@@ -110,6 +110,8 @@ def migrate_movies_table(conn) -> None:
 
 def init_db() -> None:
     conn = get_conn()
+
+    # audit_log (sizda bor bo'lsa qoldiring)
     conn.execute("""
     CREATE TABLE IF NOT EXISTS audit_log (
         id SERIAL PRIMARY KEY,
@@ -121,6 +123,58 @@ def init_db() -> None:
     )
     """)
 
+    # movies + aliases (sizda bor)
+    migrate_movies_table(conn)
+
+    # users
+    conn.execute("""
+    CREATE TABLE IF NOT EXISTS users (
+        user_id   BIGINT PRIMARY KEY,
+        username  TEXT,
+        full_name TEXT,
+        joined_at BIGINT NOT NULL,
+        last_seen BIGINT NOT NULL,
+        is_admin  INTEGER NOT NULL DEFAULT 0,
+        is_banned INTEGER NOT NULL DEFAULT 0
+    )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_users_last_seen ON users(last_seen)")
+
+    # user_access
+    conn.execute("""
+    CREATE TABLE IF NOT EXISTS user_access (
+        user_id BIGINT PRIMARY KEY,
+        expires_at BIGINT NOT NULL
+    )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_user_access_expires ON user_access(expires_at)")
+
+    # access_notifs
+    conn.execute("""
+    CREATE TABLE IF NOT EXISTS access_notifs (
+        user_id    BIGINT NOT NULL,
+        kind       TEXT NOT NULL,
+        expires_at BIGINT NOT NULL,
+        sent_at    BIGINT NOT NULL,
+        PRIMARY KEY (user_id, kind, expires_at)
+    )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_access_notifs_sent ON access_notifs(sent_at)")
+
+    # search_logs
+    conn.execute("""
+    CREATE TABLE IF NOT EXISTS search_logs (
+        id SERIAL PRIMARY KEY,
+        user_id BIGINT NOT NULL,
+        query TEXT NOT NULL,
+        found INTEGER NOT NULL,
+        created_at BIGINT NOT NULL
+    )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_search_created ON search_logs(created_at)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_search_user ON search_logs(user_id)")
+
+    conn.commit()
     migrate_movies_table(conn)
 
     # qolgan jadvallar (users, user_access, access_notifs, audit_log, search_logs)
