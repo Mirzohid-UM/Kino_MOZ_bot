@@ -5,6 +5,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from db import auditj
 from db.core import get_pool
 from db.access import grant_access
+from typing import Optional, List, Dict, Any
 
 router = Router()
 logger = logging.getLogger(__name__)
