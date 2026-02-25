@@ -74,7 +74,7 @@ async def search_movie(message: types.Message):
     base = (m.group(1) or "").strip() if m else query
     episode = m.group(2) if m else None
 
-    items = await find_top_movies(base)
+    items = find_top_movies(base)         # ✅
 
     # Agar ep berilgan bo'lsa, mos epni oldinga olib chiqamiz
     if items and episode:
