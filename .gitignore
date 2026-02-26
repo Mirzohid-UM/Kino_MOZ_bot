@@ -8,6 +8,11 @@ __pycache__/
 venv/
 EOF
 
+*.db
+*.db-wal
+*.db-shm
+.idea/
+
 git rm --cached -r -- "*.db" "*.db-wal" "*.db-shm" "*.bak*" 2>/dev/null || true
 git add .gitignore
 git commit -m "chore: ignore local db/log files"
