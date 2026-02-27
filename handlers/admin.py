@@ -59,7 +59,7 @@ async def grant_cmd(message: types.Message):
             actor_id=message.from_user.id,
             action="grant_access",
             target_id=user_id,
-            meta_obj={"days": days, "expires_at": expires_at_i},
+            meta={"days": days, "expires_at": expires_at_i},
         )
 
         # 3) Tekshiruv

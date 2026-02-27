@@ -70,7 +70,7 @@ async def access_reject(call: types.CallbackQuery):
                 actor_id=call.from_user.id,
                 action="reject_access",
                 target_id=user_id,
-                meta_obj={},
+                meta={},
             )
         else:
             auditj(call.from_user.id, "reject_access", user_id, {})
