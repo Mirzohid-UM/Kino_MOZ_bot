@@ -80,18 +80,27 @@ async def find_top_movies(query: str, limit: int = 30, score_cutoff: int = 70) -
     # ✅ DB async
     candidates = await get_movies_like(qn, limit=120)
     if not candidates:
-        candidates = await get_movies_limit(300)
+        tokens = qn.split()
+        if len(tokens) == 1 and len(tokens[0]) < 4:
+            return []  # ✅ 1-3 harfga latest fallback yo‘q
+        candidates = await get_movies_limit(2000)
         logger.info("Fallback fuzzy used for query=%r", query)
 
     if not candidates:
-        return []
+        logger.warning("SEARCH db_like empty -> fallback_limit=300 query=%r qn=%r", query, qn)
+        candidates = await get_movies_limit(300)
+        logger.info("SEARCH fallback_limit: rows=%d", len(candidates))
 
+    logger.info("SEARCH in: query=%r", query)
+    qn = normalize(query).strip()
+    logger.info("SEARCH norm: qn=%r len=%d", qn, len(qn))
     tokens = qn.split()
+    logger.info("SEARCH tokens: %s", tokens)
 
     # --- SHORT QUERY GUARD ---
     if len(tokens) == 1 and len(tokens[0]) < 4:
         needle = tokens[0]
-        exact, word_prefix, rest = [], [], []
+        exact, word_prefix = [], []
 
         for row in candidates:
             tn = normalize(_row_title(row)).strip()
@@ -101,10 +110,13 @@ async def find_top_movies(query: str, limit: int = 30, score_cutoff: int = 70) -
                 exact.append(row)
             elif any(w == needle or w.startswith(needle) for w in words):
                 word_prefix.append(row)
-            else:
-                rest.append(row)
 
-        ordered = exact + word_prefix + rest
+        ordered = exact + word_prefix
+
+        # ✅ MUHIM: hech narsa topilmasa, oxirgilarni qaytarmaymiz
+        if not ordered:
+            return []
+
         return [
             {
                 "title": _row_title(row),
@@ -114,7 +126,6 @@ async def find_top_movies(query: str, limit: int = 30, score_cutoff: int = 70) -
             }
             for row in ordered[:limit]
         ]
-
     titles = [_row_title(r) for r in candidates]
     scorer = fuzz.token_set_ratio if len(tokens) > 1 else fuzz.QRatio
 
