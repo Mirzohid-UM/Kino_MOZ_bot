@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import logging
 import datetime
+import time
+import inspect
+
 from utils.search_cache import SEARCH_CACHE
 from aiogram import Router, F, types
 
@@ -12,8 +15,7 @@ from db.audit import auditj
 router = Router()
 logger = logging.getLogger(__name__)
 
-ADMIN_IDS = {7040085454}  # <-- sizning ID
-
+ADMIN_IDS = {7040085454}
 
 @router.message(F.text.startswith("/grant"))
 async def grant_cmd(message: types.Message):
@@ -36,27 +38,44 @@ async def grant_cmd(message: types.Message):
         await message.answer("❌ Noto‘g‘ri format. Masalan: /grant 7040085454 1")
         return
 
-    # 1) Amal (async)
-    expires_at = await grant_access(user_id, days=days)
+    # 1) Grant (1 marta, to‘g‘ri await)
+    try:
+        now = int(time.time())
+        fallback_expires_at = now + days * 86400
 
-    # 2) Audit (async)
-    await auditj(
-        actor_id=message.from_user.id,
-        action="grant_access",
-        target_id=user_id,
-        meta={"days": days, "expires_at": int(expires_at)},
-    )
+        if inspect.iscoroutinefunction(grant_access):
+            expires_at = await grant_access(user_id, days=days)
+        else:
+            expires_at = grant_access(user_id, days=days)
 
-    # 3) Tekshiruv (async)
-    ok = await has_access(user_id)
+        # agar grant_access hech narsa qaytarmasa (None) — fallback
+        if expires_at is None:
+            expires_at = fallback_expires_at
 
-    dt = datetime.datetime.fromtimestamp(int(expires_at))
-    await message.answer(
-        f"✅ Access berildi: user_id={user_id}, days={days}\n"
-        f"🕒 Tugash: {dt:%Y-%m-%d %H:%M}\n"
-        f"Tekshiruv: {ok}"
-    )
-    logger.info("Access granted by admin=%s to user=%s days=%s", message.from_user.id, user_id, days)
+        expires_at_i = int(expires_at)
+
+        # 2) Audit
+        await auditj(
+            actor_id=message.from_user.id,
+            action="grant_access",
+            target_id=user_id,
+            meta_obj={"days": days, "expires_at": expires_at_i},
+        )
+
+        # 3) Tekshiruv
+        ok = await has_access(user_id)
+
+        dt = datetime.datetime.fromtimestamp(expires_at_i)
+        await message.answer(
+            f"✅ Access berildi: user_id={user_id}, days={days}\n"
+            f"🕒 Tugash: {dt:%Y-%m-%d %H:%M}\n"
+            f"Tekshiruv: {ok}"
+        )
+        logger.info("Access granted by admin=%s to user=%s days=%s", message.from_user.id, user_id, days)
+
+    except Exception:
+        logger.exception("Grant failed")
+        await message.answer("❌ Grant qilishda xatolik. Logni tekshiring.")
 
 
 @router.message(F.text.startswith("/extend"))

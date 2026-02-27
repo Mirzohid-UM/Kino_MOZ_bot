@@ -6,15 +6,18 @@ from db import auditj
 from db.core import get_pool
 from db.access import grant_access
 from typing import Optional, List, Dict, Any
+import inspect
 
-router = Router()
+
 logger = logging.getLogger(__name__)
+router = Router()
 
 ADMIN_IDS = {7040085454}  # sizning telegram ID
 
 def make_request_kb():
     kb = InlineKeyboardBuilder()
     kb.button(text="🔐 Ruxsat so‘rash", callback_data="access:request")
+    kb.adjust(1)
     return kb.as_markup()
 
 def make_admin_approve_kb(user_id: int):
@@ -51,32 +54,45 @@ async def access_request(call: types.CallbackQuery):
 
     await call.answer("So‘rov yuborildi. Admin tasdiqlashini kuting.", show_alert=True)
 
-@router.callback_query(F.data.startswith("access:approve:"))
-async def access_approve(call: types.CallbackQuery):
+
+@router.callback_query(F.data.startswith("access:reject:"))
+async def access_reject(call: types.CallbackQuery):
     if call.from_user.id not in ADMIN_IDS:
         await call.answer("⛔ Ruxsat yo‘q.", show_alert=True)
         return
 
-    _, _, user_id_s, days_s = call.data.split(":")
-    user_id = int(user_id_s)
-    days = int(days_s)
+    try:
+        _, _, user_id_s = call.data.split(":")
+        user_id = int(user_id_s)
 
-    grant_access(user_id, days=days)
+        if inspect.iscoroutinefunction(auditj):
+            await auditj(
+                actor_id=call.from_user.id,
+                action="reject_access",
+                target_id=user_id,
+                meta_obj={},
+            )
+        else:
+            auditj(call.from_user.id, "reject_access", user_id, {})
 
-    auditj(
-        actor_id=call.from_user.id,
-        action="grant_access",
-        target_id=user_id,
-        meta_obj={"days": days}
-    )
+        try:
+            await call.bot.send_message(
+                chat_id=user_id,
+                text="❌ Ruxsat berilmadi. Admin bilan bog‘laning."
+            )
+        except Exception:
+            logger.exception("Failed to DM user_id=%s on reject", user_id)
 
-    # Userga xabar
-    await call.bot.send_message(
-        chat_id=user_id,
-        text=f"✅ Sizga ruxsat berildi: {days} kun."
-    )
-    await call.message.edit_reply_markup(reply_markup=None)  # ✅ tugmalarni o‘chiradi
-    await call.answer("Tasdiqlandi.", show_alert=True)
+        try:
+            await call.message.edit_reply_markup(reply_markup=None)
+        except Exception:
+            logger.exception("Failed to remove keyboard on reject")
+
+        await call.answer("Rad etildi.", show_alert=True)
+
+    except Exception:
+        logger.exception("Reject failed. data=%r", call.data)
+        await call.answer("❌ Xatolik. Logni tekshiring.", show_alert=True)
 
 @router.callback_query(F.data.startswith("access:reject:"))
 async def access_reject(call: types.CallbackQuery):
