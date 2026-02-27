@@ -56,7 +56,7 @@ async def subs_cmd(message: types.Message):
     now = int(time.time())
 
     # ✅ endi async
-    rows = await list_active_users_with_profiles(limit=5000, now=now)
+    rows = await list_active_users_with_profiles(limit=5000)
 
     # bucketlar
     b_48h: List[Dict[str, Any]] = []
