@@ -79,13 +79,13 @@ async def find_top_movies(query: str, limit: int = 30, score_cutoff: int = 70) -
 
     # ✅ DB async
     candidates = await get_movies_like(qn, limit=120)
-    if not candidates:
-        tokens = qn.split()
-        if len(tokens) == 1 and len(tokens[0]) < 4:
-            return []  # ✅ 1-3 harfga latest fallback yo‘q
-        candidates = await get_movies_limit(2000)
-        logger.info("Fallback fuzzy used for query=%r", query)
+    logger.info("SEARCH candidates=%d", len(candidates))
 
+    if not candidates:
+        if len(qn) < 4:
+            return []
+        candidates = await get_movies_limit(300)
+        logger.info("Fallback fuzzy used for query=%r", query)
     if not candidates:
         logger.warning("SEARCH db_like empty -> fallback_limit=300 query=%r qn=%r", query, qn)
         candidates = await get_movies_limit(300)

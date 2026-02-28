@@ -144,7 +144,7 @@ async def get_movies_like(query: str, limit: int = 20):
         if exact:
             return [dict(r) for r in exact]
 
-        # 2) WORD-START style
+        # 2) WORD-START (word boundary-ish)
         clauses = []
         params = []
         i = 1
@@ -152,14 +152,16 @@ async def get_movies_like(query: str, limit: int = 20):
             clauses.append(f"(' ' || COALESCE(title_norm,'') || ' ') LIKE ${i}")
             params.append(f"% {t}%")
             i += 1
+
         clauses_sql = " AND ".join(clauses)
         params.append(int(limit))
+
         ws = await conn.fetch(
             f"""
             SELECT COALESCE(title_raw, title) AS title, message_id, channel_id
             FROM movies
             WHERE {clauses_sql}
-            ORDER BY LENGTH(COALESCE(title_norm,'')) ASC
+            ORDER BY created_at DESC
             LIMIT ${i}
             """,
             *params
@@ -176,12 +178,13 @@ async def get_movies_like(query: str, limit: int = 20):
             params.append(f"%{t}%")
             i += 1
         params.append(int(limit))
+
         ct = await conn.fetch(
             f"""
             SELECT COALESCE(title_raw, title) AS title, message_id, channel_id
             FROM movies
             WHERE {" AND ".join(clauses)}
-            ORDER BY LENGTH(COALESCE(title_norm,'')) ASC
+            ORDER BY created_at DESC
             LIMIT ${i}
             """,
             *params
