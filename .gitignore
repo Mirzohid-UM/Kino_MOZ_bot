@@ -1,21 +1,32 @@
 cat > .gitignore <<'EOF'
+# env
 .env
-*.bak*
-*.log
+
+# python
 __pycache__/
 *.pyc
 .venv/
 venv/
-EOF
 
+# logs / backups
+*.log
+*.bak*
+db_junk/
+
+# databases
 *.db
 *.db-wal
 *.db-shm
+*.sqlite
+*.sqlite3
+*.wal
+*.shm
+
+# IDE
 .idea/
+.vscode/
+EOF
 
-git rm --cached -r -- "*.db" "*.db-wal" "*.db-shm" "*.bak*" 2>/dev/null || true
 git add .gitignore
-git commit -m "chore: ignore local db/log files"
-
-git pull --rebase origin main
-git push -u origin main
+git commit -m "fix: correct .gitignore"
+git push
