@@ -60,39 +60,4 @@ async def start_cmd(message: types.Message):
     )
 
 
-@router.callback_query(F.data == "access:request")
-async def access_request(call: types.CallbackQuery):
-    user = call.from_user
-    user_id = int(user.id)
-    username = user.username or ""
-    full_name = user.full_name or ""
-
-    # cooldown 60s
-    now = asyncio.get_event_loop().time()
-    last = _LAST_REQ.get(user_id, 0.0)
-    if now - last < 60:
-        await call.answer("⏳ Biroz kuting, so‘rov allaqachon yuborilgan.", show_alert=True)
-        return
-    _LAST_REQ[user_id] = now
-
-    await call.answer("✅ So‘rov yuborildi. Admin javobini kuting.", show_alert=True)
-
-    text = "🔔 Ruxsat so‘rovi\n\n"
-    text += f"👤 User: {full_name}\n"
-    if username:
-        text += f"@{username}\n"
-    text += f"🆔 ID: {user_id}"
-
-    for admin_id in ADMIN_IDS:
-        try:
-            await call.bot.send_message(admin_id, text)
-        except TelegramRetryAfter as e:
-            await asyncio.sleep(e.retry_after)
-            try:
-                await call.bot.send_message(admin_id, text)
-            except Exception:
-                logger.exception("Admin %s ga retrydan keyin ham yuborilmadi", admin_id)
-        except (TelegramForbiddenError, TelegramBadRequest):
-            logger.warning("Admin %s ga yuborilmadi (blocked/chat not found)", admin_id)
-        except Exception:
             logger.exception("Admin %s ga xabar yuborib bo‘lmadi", admin_id)
