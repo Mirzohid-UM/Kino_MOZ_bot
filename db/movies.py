@@ -119,7 +119,6 @@ async def get_movies_limit(limit: int = 300):
             int(limit)
         )
     return [dict(r) for r in rows]
-
 async def get_movies_like(query: str, limit: int = 20):
     q = normalize(query).strip()
     if not q:
@@ -131,62 +130,115 @@ async def get_movies_like(query: str, limit: int = 20):
 
     pool = get_pool()
     async with pool.acquire() as conn:
-        # 1) EXACT word match
-        exact = await conn.fetch(
+        # 1) EXACT word match (title yoki alias)
+        rows = await conn.fetch(
             """
-            SELECT COALESCE(title_raw, title) AS title, message_id, channel_id
-            FROM movies
-            WHERE (' ' || COALESCE(title_norm,'') || ' ') LIKE ('% ' || $1 || ' %')
+            WITH cand AS (
+              SELECT m.channel_id, m.message_id, COALESCE(m.title_raw, m.title) AS title,
+                     1 AS rank
+              FROM movies m
+              WHERE (' ' || COALESCE(m.title_norm,'') || ' ') LIKE ('% ' || $1 || ' %')
+
+              UNION ALL
+
+              SELECT m.channel_id, m.message_id, COALESCE(m.title_raw, m.title) AS title,
+                     1 AS rank
+              FROM movies m
+              JOIN movie_aliases a
+                ON a.channel_id = m.channel_id AND a.message_id = m.message_id
+              WHERE (' ' || COALESCE(a.alias_norm,'') || ' ') LIKE ('% ' || $1 || ' %')
+            )
+            SELECT DISTINCT ON (channel_id, message_id)
+              title, message_id, channel_id
+            FROM cand
+            ORDER BY channel_id, message_id, rank
             LIMIT $2
             """,
             q, int(limit)
         )
-        if exact:
-            return [dict(r) for r in exact]
+        if rows:
+            return [dict(r) for r in rows]
 
-        # 2) WORD-START (word boundary-ish)
-        clauses = []
-        params = []
+        # 2) WORD-START style: barcha tokenlar title/alias ichida bo‘lsin
+        # (' '||norm||' ') LIKE '% token%'  (word-boundaryga yaqin)
+        clauses_t = []
+        clauses_a = []
+        params: List[object] = []
         i = 1
         for t in tokens:
-            clauses.append(f"(' ' || COALESCE(title_norm,'') || ' ') LIKE ${i}")
+            clauses_t.append(f"(' ' || COALESCE(m.title_norm,'') || ' ') LIKE ${i}")
+            clauses_a.append(f"(' ' || COALESCE(a.alias_norm,'') || ' ') LIKE ${i}")
             params.append(f"% {t}%")
             i += 1
 
-        clauses_sql = " AND ".join(clauses)
         params.append(int(limit))
+        limit_param = i
 
-        ws = await conn.fetch(
+        rows = await conn.fetch(
             f"""
-            SELECT COALESCE(title_raw, title) AS title, message_id, channel_id
-            FROM movies
-            WHERE {clauses_sql}
-            ORDER BY created_at DESC
-            LIMIT ${i}
+            WITH cand AS (
+              SELECT m.channel_id, m.message_id, COALESCE(m.title_raw, m.title) AS title,
+                     2 AS rank, m.created_at
+              FROM movies m
+              WHERE {" AND ".join(clauses_t)}
+
+              UNION ALL
+
+              SELECT m.channel_id, m.message_id, COALESCE(m.title_raw, m.title) AS title,
+                     2 AS rank, m.created_at
+              FROM movies m
+              JOIN movie_aliases a
+                ON a.channel_id = m.channel_id AND a.message_id = m.message_id
+              WHERE {" AND ".join(clauses_a)}
+            )
+            SELECT DISTINCT ON (channel_id, message_id)
+              title, message_id, channel_id
+            FROM cand
+            ORDER BY channel_id, message_id, rank, created_at DESC
+            LIMIT ${limit_param}
             """,
             *params
         )
-        if ws:
-            return [dict(r) for r in ws]
+        if rows:
+            return [dict(r) for r in rows]
 
-        # 3) CONTAINS
-        clauses = []
+        # 3) CONTAINS: tokenlar substring bo‘lib kelsin (eng yumshoq)
+        clauses_t = []
+        clauses_a = []
         params = []
         i = 1
         for t in tokens:
-            clauses.append(f"COALESCE(title_norm,'') LIKE ${i}")
+            clauses_t.append(f"COALESCE(m.title_norm,'') LIKE ${i}")
+            clauses_a.append(f"COALESCE(a.alias_norm,'') LIKE ${i}")
             params.append(f"%{t}%")
             i += 1
-        params.append(int(limit))
 
-        ct = await conn.fetch(
+        params.append(int(limit))
+        limit_param = i
+
+        rows = await conn.fetch(
             f"""
-            SELECT COALESCE(title_raw, title) AS title, message_id, channel_id
-            FROM movies
-            WHERE {" AND ".join(clauses)}
-            ORDER BY created_at DESC
-            LIMIT ${i}
+            WITH cand AS (
+              SELECT m.channel_id, m.message_id, COALESCE(m.title_raw, m.title) AS title,
+                     3 AS rank, m.created_at
+              FROM movies m
+              WHERE {" AND ".join(clauses_t)}
+
+              UNION ALL
+
+              SELECT m.channel_id, m.message_id, COALESCE(m.title_raw, m.title) AS title,
+                     3 AS rank, m.created_at
+              FROM movies m
+              JOIN movie_aliases a
+                ON a.channel_id = m.channel_id AND a.message_id = m.message_id
+              WHERE {" AND ".join(clauses_a)}
+            )
+            SELECT DISTINCT ON (channel_id, message_id)
+              title, message_id, channel_id
+            FROM cand
+            ORDER BY channel_id, message_id, rank, created_at DESC
+            LIMIT ${limit_param}
             """,
             *params
         )
-        return [dict(r) for r in ct]
+        return [dict(r) for r in rows]
