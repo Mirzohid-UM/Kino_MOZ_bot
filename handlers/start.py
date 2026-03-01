@@ -60,4 +60,4 @@ async def start_cmd(message: types.Message):
     )
 
 
-            logger.exception("Admin %s ga xabar yuborib bo‘lmadi", admin_id)
+
