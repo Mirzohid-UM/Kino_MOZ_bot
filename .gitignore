@@ -20,3 +20,8 @@ git commit -m "chore: ignore local db/log files"
 git pull --rebase origin main
 git push -u origin mainmovies.json
 movies.json
+movies.db*
+*.db
+*.sqlite*
+*.wal
+*.shm
