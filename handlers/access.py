@@ -7,7 +7,7 @@ from db.core import get_pool
 from db.access import grant_access
 from typing import Optional, List, Dict, Any
 import inspect
-
+import datetime
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -132,20 +132,7 @@ async def access_reject(call: types.CallbackQuery):
         logger.exception("Reject failed. data=%r", call.data)
         await call.answer("❌ Xatolik. Logni tekshiring.", show_alert=True)
 
-@router.callback_query(F.data.startswith("access:reject:"))
-async def access_reject(call: types.CallbackQuery):
-    if call.from_user.id not in ADMIN_IDS:
-        await call.answer("⛔ Ruxsat yo‘q.", show_alert=True)
-        return
 
-    _, _, user_id_s = call.data.split(":")
-    user_id = int(user_id_s)
-    auditj(call.from_user.id, "reject_access", user_id, {})
-    await call.bot.send_message(
-        chat_id=user_id,
-        text="❌ Ruxsat berilmadi. Admin bilan bog‘laning."
-    )
-    await call.answer("Rad etildi.", show_alert=True)
 
 async def list_active_users_with_profiles(*, limit: int = 5000, now: Optional[int] = None) -> List[Dict[str, Any]]:
     if now is None:
