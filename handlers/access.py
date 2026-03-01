@@ -20,14 +20,15 @@ def make_request_kb():
     kb.adjust(1)
     return kb.as_markup()
 
-def make_admin_approve_kb(user_id: int):
+def make_admin_approve_kb(user_id: int) -> types.InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
-    kb.button(text="✅ Approve (1 kun)", callback_data=f"access:approve:{user_id}:1")
-    kb.button(text="✅ Approve (7 kun)", callback_data=f"access:approve:{user_id}:7")
+    kb.button(text="✅ Approve (1 kun)",  callback_data=f"access:approve:{user_id}:1")
+    kb.button(text="✅ Approve (7 kun)",  callback_data=f"access:approve:{user_id}:7")
     kb.button(text="✅ Approve (10 kun)", callback_data=f"access:approve:{user_id}:10")
+    kb.button(text="✅ Approve (20 kun)", callback_data=f"access:approve:{user_id}:20")
     kb.button(text="✅ Approve (30 kun)", callback_data=f"access:approve:{user_id}:30")
     kb.button(text="✅ Approve (90 kun)", callback_data=f"access:approve:{user_id}:90")
-    kb.button(text="❌ Reject", callback_data=f"access:reject:{user_id}")
+    kb.button(text="❌ Reject",          callback_data=f"access:reject:{user_id}")
     kb.adjust(1)
     return kb.as_markup()
 
@@ -35,25 +36,62 @@ def make_admin_approve_kb(user_id: int):
 @router.callback_query(F.data == "access:request")
 async def access_request(call: types.CallbackQuery):
     user = call.from_user
-    text = "🔔 Yangi ruxsat so‘rovi\n\n"
-    text += f"User: {user.full_name}\n"
-    if user.username:
-         text += f"Username: @{user.username}\n"
-    text += f"User ID: {user.id}\n"
 
-    # Adminlarga yuboramiz
+    text = (
+        "🔔 Yangi ruxsat so‘rovi\n\n"
+        f"👤 Ism: {user.full_name}\n"
+        + (f"🔗 Username: @{user.username}\n" if user.username else "")
+        + f"🆔 User ID: {user.id}\n"
+    )
+
     for admin_id in ADMIN_IDS:
         try:
             await call.bot.send_message(
                 chat_id=admin_id,
                 text=text,
-                reply_markup=make_admin_approve_kb(user.id)
+                reply_markup=make_admin_approve_kb(user.id),
             )
-        except Exception as e:
-            logger.exception(f"Failed to notify admin {admin_id}: {e}")
+        except Exception:
+            logger.exception("Failed to notify admin %s", admin_id)
 
-    await call.answer("So‘rov yuborildi. Admin tasdiqlashini kuting.", show_alert=True)
+    await call.answer("✅ So‘rov yuborildi. Admin tasdiqlashini kuting.", show_alert=True)
 
+
+@router.callback_query(F.data.startswith("access:approve:"))
+async def access_approve(call: types.CallbackQuery):
+    if call.from_user.id not in ADMIN_IDS:
+        await call.answer("⛔ Ruxsat yo‘q.", show_alert=True)
+        return
+
+    try:
+        _, _, user_id_s, days_s = call.data.split(":")
+        user_id = int(user_id_s)
+        days = int(days_s)
+
+        # DB'ga ruxsat beramiz
+        expires_at = await grant_access(user_id=user_id, days=days)  # <-- expires_at unix bo'lsin
+
+        # userga xabar
+        dt = datetime.datetime.fromtimestamp(int(expires_at))
+        await call.bot.send_message(
+            chat_id=user_id,
+            text=(
+                f"✅ Sizga {days} kunlik obuna tayinlandi!\n"
+                f"📅 Tugash vaqti: {dt:%Y-%m-%d %H:%M}"
+            ),
+        )
+
+        # admin xabaridagi tugmalarni o'chiramiz
+        try:
+            await call.message.edit_reply_markup(reply_markup=None)
+        except Exception:
+            logger.exception("Failed to remove approve keyboard")
+
+        await call.answer(f"✅ {days} kun berildi.", show_alert=True)
+
+    except Exception:
+        logger.exception("Approve failed. data=%r", call.data)
+        await call.answer("❌ Xatolik. Logni tekshiring.", show_alert=True)
 
 @router.callback_query(F.data.startswith("access:reject:"))
 async def access_reject(call: types.CallbackQuery):
