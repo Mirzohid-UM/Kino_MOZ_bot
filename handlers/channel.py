@@ -3,7 +3,7 @@
 from aiogram import Router, types
 import logging
 import re
-
+from utils.post_parser import parse_movie_post
 from db.movies import add_movie_with_aliases
 from db.audit import auditj
 from utils.search_cache import SEARCH_CACHE
