@@ -56,13 +56,14 @@ async def channel_post_handler(message: types.Message):
     if not message.caption:
         return
 
-    main_title, aliases = extract_title_and_aliases(message.caption)
-    if not main_title:
+    parsed = parse_movie_post(message.caption)
+
+    if not parsed.title:
         return
 
     await add_movie_with_aliases(
-        title=main_title,
-        aliases=aliases,
+        title=parsed.title,
+        aliases=parsed.aliases,
         message_id=message.message_id,
         channel_id=message.chat.id,
     )
@@ -76,8 +77,9 @@ async def channel_post_handler(message: types.Message):
             meta={
                 "channel_id": message.chat.id,
                 "message_id": message.message_id,
-                "title": main_title,
-                "aliases": aliases[:10],
+                "title": parsed.title,
+                "aliases": parsed.aliases[:10],
+                "clean_text": parsed.clean_text[:300],
             },
         )
     except Exception:
@@ -85,5 +87,5 @@ async def channel_post_handler(message: types.Message):
 
     logger.info(
         "Added movie: %r aliases=%r (channel=%s msg=%s)",
-        main_title, aliases, message.chat.id, message.message_id
+        parsed.title, parsed.aliases, message.chat.id, message.message_id
     )
