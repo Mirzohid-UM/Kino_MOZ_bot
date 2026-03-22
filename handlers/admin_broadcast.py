@@ -4,30 +4,20 @@ from aiogram import Router, F, types
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 
 from db.access import list_active_user_ids
+from db.broadcast import list_all_users, list_unsubscribed_users, set_user_blocked
 
 router = Router()
 log = logging.getLogger(__name__)
 
-ADMIN_ID = 7040085454
+ADMIN_IDS = [7040085454]
 
 
-@router.message(F.text == "/post")
-async def broadcast_post(message: types.Message):
-    if message.from_user.id != ADMIN_ID:
-        return
+# =========================
+# UNIVERSAL BROADCAST
+# =========================
 
-    if not message.reply_to_message:
-        await message.answer("Post yuborish uchun biror xabarga reply qilib /post yozing.")
-        return
-
+async def run_broadcast(message: types.Message, user_ids: list[int]):
     src = message.reply_to_message
-
-    # ✅ async DB chaqiruv
-    user_ids = await list_active_user_ids()
-
-    if not user_ids:
-        await message.answer("Aktiv obunachilar topilmadi.")
-        return
 
     sent = 0
     failed = 0
@@ -45,24 +35,91 @@ async def broadcast_post(message: types.Message):
 
         except (TelegramForbiddenError, TelegramBadRequest):
             failed += 1
+            await set_user_blocked(uid)   # 🔥 blok qilgan
 
         except Exception as e:
             failed += 1
             log.exception("broadcast error uid=%s err=%s", uid, e)
 
-        # throttle
+        # anti flood
         if i % 20 == 0:
             await asyncio.sleep(1)
 
+        # progress update
         if i % 50 == 0 or i == len(user_ids):
             try:
                 await status.edit_text(f"📣 Yuborilyapti... {i}/{len(user_ids)}")
-            except Exception:
+            except:
                 pass
 
     await status.edit_text(
-        "✅ Broadcast yakunlandi.\n\n"
-        f"📨 Yuborildi: {sent}\n"
-        f"❌ Yetmadi: {failed}\n"
-        f"👥 Jami: {len(user_ids)}"
+        f"""✅ Broadcast yakunlandi
+
+📨 Yuborildi: {sent}
+❌ Yetmadi: {failed}
+👥 Jami: {len(user_ids)}
+"""
     )
+
+
+# =========================
+# /post → HAMMAGA
+# =========================
+@router.message(F.text == "/post")
+async def post_all(message: types.Message):
+    if message.from_user.id not in ADMIN_IDS:
+        return
+
+    if not message.reply_to_message:
+        await message.answer("Post yuborish uchun reply qiling.")
+        return
+
+    user_ids = await list_all_users()
+
+    if not user_ids:
+        await message.answer("Userlar topilmadi.")
+        return
+
+    await run_broadcast(message, user_ids)
+
+
+# =========================
+# /postobuna → OBUNACHILAR
+# =========================
+@router.message(F.text == "/postobuna")
+async def post_subs(message: types.Message):
+    if message.from_user.id not in ADMIN_IDS:
+        return
+
+    if not message.reply_to_message:
+        await message.answer("Reply qiling.")
+        return
+
+    user_ids = await list_active_user_ids()
+
+    if not user_ids:
+        await message.answer("Obunachilar topilmadi.")
+        return
+
+    await run_broadcast(message, user_ids)
+
+
+# =========================
+# /postbezobuna → OBUNASIZLAR
+# =========================
+@router.message(F.text == "/postbezobuna")
+async def post_no_subs(message: types.Message):
+    if message.from_user.id not in ADMIN_IDS:
+        return
+
+    if not message.reply_to_message:
+        await message.answer("Reply qiling.")
+        return
+
+    user_ids = await list_unsubscribed_users()
+
+    if not user_ids:
+        await message.answer("Mos user topilmadi.")
+        return
+
+    await run_broadcast(message, user_ids)

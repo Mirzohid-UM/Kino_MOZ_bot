@@ -10,7 +10,7 @@ from typing import Any, Dict, List
 from aiogram import Router, F, types
 from aiogram.filters import Command
 
-from db.access import get_expiring_between, was_notified, mark_notified,list_active_users_with_profiles,extend_access
+from db.access import get_expiring_between, was_notified, mark_notified,list_active_users_with_profiles,get_access_info
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -142,22 +142,35 @@ async def sub_info(call: types.CallbackQuery):
     user_id = call.from_user.id
     now = int(time.time())
 
-    # ✅ asyncpg: conn yo‘q, %s yo‘q
-    exp = await extend_access(user_id)
+    exp = await get_access_info(user_id)
 
     if not exp:
-        await call.answer("Sizda hozir obuna yo‘q.", show_alert=True)
+        await call.answer("❌ Sizda hozir obuna yo‘q.", show_alert=True)
         return
 
     exp = int(exp)
+
     if exp <= now:
-        await call.answer("Obunangiz tugagan. Adminga yozing.", show_alert=True)
+        await call.answer(
+            "❌ Obunangiz tugagan!\n\n"
+            "🚫 Botdan foydalanish cheklangan\n\n"
+            "🔥 Hoziroq tiklang va davom eting:\n"
+            "👉 /start",
+            show_alert=True
+        )
         return
 
     msg = (
-        "ℹ️ Obuna ma’lumoti\n\n"
-        f"🕒 Tugash vaqti: {_fmt_ts(exp)} ({TZ_LABEL})\n"
-        f"⌛ Qoldi: {_remains(exp)}\n\n"
-        "Uzaytirish uchun adminga yozing."
+        "💎 Premium status: AKTIV\n\n"
+        f"🕒 Tugash: {_fmt_ts(exp)}\n"
+        f"⏳ Qoldi: {_remains(exp)}\n\n"
+        "━━━━━━━━━━━━━━━\n"
+        "🔥 Siz hozir VIP foydalanuvchisiz!\n\n"
+        "❗ Muhim:\n"
+        "Obuna tugashi bilan barcha imkoniyatlar yopiladi.\n\n"
+        "🚀 Oldindan uzaytiring va hech narsa yo‘qotmang!\n"
+        "👉 /start orqali davom eting"
     )
-    await call.answer(msg, show_alert=True)
+    await call.answer("💎 Obuna ma’lumoti", show_alert=True)
+
+    await call.message.answer(msg, parse_mode="Markdown")

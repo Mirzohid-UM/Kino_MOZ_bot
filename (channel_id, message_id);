@@ -1,0 +1,20 @@
+                              Table "public.movies"
+   Column   |  Type  | Collation | Nullable |              Default               
+------------+--------+-----------+----------+------------------------------------
+ id         | bigint |           | not null | nextval('movies_id_seq'::regclass)
+ channel_id | bigint |           | not null | 
+ message_id | bigint |           | not null | 
+ title      | text   |           |          | 
+ title_raw  | text   |           |          | 
+ title_norm | text   |           |          | 
+ created_at | bigint |           |          | 
+Indexes:
+    "movies_pkey" PRIMARY KEY, btree (id)
+    "idx_movies_created_at" btree (created_at DESC)
+    "idx_movies_search" gin (to_tsvector('simple'::regconfig, title_raw))
+    "idx_movies_title_norm" btree (title_norm)
+    "idx_movies_title_raw" btree (title_raw)
+    "movies_channel_id_message_id_key" UNIQUE CONSTRAINT, btree (channel_id, message_id)
+    "movies_channel_message_unique" UNIQUE CONSTRAINT, btree (channel_id, message_id)
+    "uq_movies_channel_msg" UNIQUE, btree (channel_id, message_id)
+

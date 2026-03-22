@@ -9,13 +9,44 @@ import asyncpg
 from .core import get_pool    # <-- endi pool qaytaradi deb faraz qilamiz
 from .users import ensure_user_exists
 
+from typing import Optional
 
-async def grant_access(user_id: int, days: int = 1) -> None:
-    await ensure_user_exists(user_id)   # agar bu ham async bo'lsa
+# Har bir admin uchun kun balansini boshqarish funksiyasi (misol)
+async def decrement_admin_days(admin_id: int, days: int) -> None:
+    """
+    Adminning kun balansini kamaytiradi.
+    Agar balans jadvalda bo'lmasa, uni 0 deb qabul qiladi.
+    """
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO admin_days (admin_id, remaining_days)
+            VALUES ($1, GREATEST(0, $2))
+            ON CONFLICT(admin_id) DO UPDATE 
+            SET remaining_days = GREATEST(0, admin_days.remaining_days - $2)
+            """,
+            admin_id,
+            days
+        )
+
+
+async def grant_access(user_id: int, days: int = 1, admins: Optional[list[int]] = None) -> int:
+    """
+    Foydalanuvchiga ruxsat beradi va agar admins berilgan bo'lsa,
+    ularning kunlarini ham avtomatik kamaytiradi.
+    Qaytaradi: expires_at timestamp
+    """
+    await ensure_user_exists(user_id)
+    now = int(time.time())
+    expires_at = now + days * 86400
+
+    # Adminlar kunlarini kamaytirish
+    if admins:
+        for admin_id in admins:
+            await decrement_admin_days(admin_id, days)
 
     pool = get_pool()
-    expires_at = int(time.time()) + days * 86400
-
     async with pool.acquire() as conn:
         await conn.execute(
             """
@@ -26,11 +57,15 @@ async def grant_access(user_id: int, days: int = 1) -> None:
             user_id,
             expires_at
         )
+    return expires_at
 
 
 async def extend_access(user_id: int, days: int = 30) -> int:
+    """
+    Foydalanuvchi obunasini uzaytiradi.
+    Qaytaradi: yangi expires_at timestamp
+    """
     await ensure_user_exists(user_id)
-
     pool = get_pool()
     now = int(time.time())
 
@@ -39,7 +74,6 @@ async def extend_access(user_id: int, days: int = 30) -> int:
             "SELECT expires_at FROM user_access WHERE user_id=$1",
             user_id
         )
-
         base = int(row["expires_at"]) if row and int(row["expires_at"]) > now else now
         new_expires = base + days * 86400
 
@@ -52,21 +86,21 @@ async def extend_access(user_id: int, days: int = 30) -> int:
             user_id,
             new_expires
         )
-
-        return new_expires
+    return new_expires
 
 
 async def has_access(user_id: int) -> bool:
+    """
+    Foydalanuvchida aktiv obuna mavjudligini tekshiradi
+    """
     pool = get_pool()
     now = int(time.time())
-
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
             "SELECT expires_at FROM user_access WHERE user_id=$1",
             user_id
         )
         return bool(row and int(row["expires_at"]) > now)
-
 
 async def count_active_subs() -> int:
     pool = get_pool()
@@ -185,3 +219,23 @@ async def mark_notified(user_id: int, kind: str, expires_at: int) -> None:
             sent_at
         )
 
+async def get_access_info(user_id: int) -> dict | None:
+    pool = get_pool()
+    now = int(time.time())
+
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT expires_at FROM user_access WHERE user_id=$1",
+            user_id
+        )
+
+        if not row:
+            return None
+
+        exp = int(row["expires_at"])
+
+        return {
+            "expires_at": exp,
+            "is_active": exp > now,
+            "remaining": max(0, exp - now)
+        }
