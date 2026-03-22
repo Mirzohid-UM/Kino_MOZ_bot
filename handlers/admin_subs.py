@@ -15,7 +15,7 @@ from db.access import get_expiring_between, was_notified, mark_notified,list_act
 router = Router()
 logger = logging.getLogger(__name__)
 
-ADMIN_IDS = {7040085454}  # o'zingizniki
+ADMIN_IDS = {7040085454,8443292780}  # o'zingizniki
 
 TZ = ZoneInfo("Asia/Tashkent")
 TZ_LABEL = "Toshkent"

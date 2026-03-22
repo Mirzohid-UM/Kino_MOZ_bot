@@ -10,7 +10,7 @@ import asyncio
 router = Router()
 logger = logging.getLogger(__name__)
 
-ADMIN_IDS = {7040085454}
+ADMIN_IDS = {7040085454,8443292780}
 
 _LAST_REQ: dict[int, float] = {}
 def request_access_kb() -> types.InlineKeyboardMarkup:

@@ -9,7 +9,7 @@ from db.broadcast import list_all_users, list_unsubscribed_users, set_user_block
 router = Router()
 log = logging.getLogger(__name__)
 
-ADMIN_IDS = [7040085454]
+ADMIN_IDS = [7040085454,8443292780]
 
 
 # =========================
