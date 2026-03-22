@@ -1,9 +1,22 @@
+import asyncpg
+import time
+
+_pool = None
+
+async def get_pool():
+    global _pool
+    if _pool is None:
+        _pool = await asyncpg.create_pool(
+            user='username', password='password',
+            database='db_name', host='localhost'
+        )
+    return _pool
+
 async def get_today_stats():
-    pool = get_pool()
-    today_start = int(time.time()) - (time.time() % 86400)
+    pool = await get_pool()  # <-- bu yerda await kerak
+    today_start = int(time.time()) - (int(time.time()) % 86400)
 
     async with pool.acquire() as conn:
-
         # yangi userlar
         new_users = await conn.fetchval(
             "SELECT COUNT(*) FROM users WHERE created_at >= $1",
