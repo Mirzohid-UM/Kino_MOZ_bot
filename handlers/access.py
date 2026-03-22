@@ -16,7 +16,7 @@ router = Router()
 logger = logging.getLogger(__name__)
 
 # Admin ID lar
-ADMIN_IDS: Set[int] = {7040085454}
+ADMIN_IDS: Set[int] = {7040085454.8443292780}
 
 # Spamdan saqlash: user 30 soniyada 1 marta so'ray oladi
 _REQ_COOLDOWN_SEC = 30
