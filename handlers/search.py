@@ -141,11 +141,10 @@ async def search_movie(message: types.Message):
     total_pages = (len(items) - 1) // PAGE_SIZE + 1
 
     await message.answer(
-        f"🎬 Topildi: {len(items)} ta (1/{total_pages})",
+        f"🎬 Topildi: {len(items)} ta (1/{total_pages})\n"
         f"⏳ Har bir kino {TTL_HOURS} soatdan keyin o‘chiriladi",
         reply_markup=build_keyboard(token, 0, items)
     )
-
 
 @router.callback_query(F.data.startswith("nav:"))
 async def nav_callback(call: types.CallbackQuery):
