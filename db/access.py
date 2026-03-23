@@ -18,11 +18,14 @@ from .users import ensure_user_exists
 # =========================
 # SAFE ACCESS (ENG MUHIM)
 # =========================
+import datetime
+import json
+
 async def grant_access(user_id: int, days: int, admin_id: int) -> bool:
     await ensure_user_exists(user_id)
 
     pool = await get_pool()
-    now = int(time.time())
+    now = datetime.datetime.utcnow()  # TIMESTAMP WITH TIME ZONE
 
     async with pool.acquire() as conn:
         async with conn.transaction():
@@ -31,13 +34,13 @@ async def grant_access(user_id: int, days: int, admin_id: int) -> bool:
             exists = await conn.fetchval(
                 "SELECT 1 FROM user_access WHERE user_id=$1 AND expires_at > $2",
                 user_id,
-                now
+                int(now.timestamp())
             )
 
             if exists:
                 return False
 
-            expires_at = now + days * 86400
+            expires_at = int(now.timestamp()) + days * 86400
 
             # ✅ ACCESS BERISH
             await conn.execute(
@@ -54,16 +57,15 @@ async def grant_access(user_id: int, days: int, admin_id: int) -> bool:
             await conn.execute(
                 """
                 INSERT INTO audit (user_id, admin_id, action, meta, created_at)
-                VALUES ($1, $2, 'grant_access', jsonb_build_object('days', $3), $4)
+                VALUES ($1, $2, 'grant_access', $3::jsonb, $4)
                 """,
                 user_id,
                 admin_id,
-                days,
+                json.dumps({"days": days}),
                 now
             )
 
             return True
-
 # =========================
 # EXTEND ACCESS
 # =========================

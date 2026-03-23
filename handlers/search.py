@@ -133,7 +133,6 @@ async def search_movie(message: types.Message):
             except Exception:
                 logger.exception("delete failed")
             await message.answer("❌ Bu kino o‘chirilgan.")
-
     token = uuid.uuid4().hex[:10]
     SEARCH_CACHE[token] = {
         "user_id": message.from_user.id,
