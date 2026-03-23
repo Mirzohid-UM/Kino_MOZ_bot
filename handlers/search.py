@@ -121,15 +121,18 @@ async def search_movie(message: types.Message):
             disable_notification=True,
         )
 
-        if not ok:
-            await message.answer(f"⏳ Bu kino {TTL} soatdan keyin o‘chiriladi")
+        if ok:
+            await message.answer(f"⏳ Bu kino {TTL_HOURS} soatdan keyin o‘chiriladi")
         else:
-            await delete_movie_by_message_id(
-                message_id=int(it["message_id"]),
-                channel_id=int(it["channel_id"]),
-            )
+            # o‘chgan bo‘lsa DBdan ham o‘chiramiz
+            try:
+                await delete_movie_by_message_id(
+                    message_id=int(it["message_id"]),
+                    channel_id=int(it["channel_id"])
+                )
+            except Exception:
+                logger.exception("delete failed")
             await message.answer("❌ Bu kino o‘chirilgan.")
-        return
 
     token = uuid.uuid4().hex[:10]
     SEARCH_CACHE[token] = {

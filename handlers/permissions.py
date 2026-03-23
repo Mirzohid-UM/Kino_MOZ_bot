@@ -6,7 +6,7 @@ from typing import Optional
 
 from aiogram import Router, F, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from db.access import grant_access,decrement_admin_days
+from db.access import grant_access
 from db.users import ensure_user_exists
 from db.audit import auditj
 

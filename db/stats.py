@@ -15,8 +15,9 @@ async def get_today_stats():
             today_start
         )
 
+        # bloklanganlar
         blocked = await conn.fetchval(
-            "SELECT COUNT(*) FROM users WHERE blocked = TRUE AND updated_at >= $1",
+            "SELECT COUNT(*) FROM users WHERE is_blocked = TRUE AND updated_at >= $1",
             today_start
         )
 
