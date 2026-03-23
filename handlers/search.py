@@ -17,7 +17,8 @@ logger: Logger = logging.getLogger(__name__)
 
 PAGE_SIZE = 5
 CACHE_TTL = 10 * 60
-
+TTL = 6 * 60 * 60  # 6 soat
+TTL_HOURS = TTL // 3600
 
 def _cleanup_cache():
     now = time.time()
@@ -115,12 +116,14 @@ async def search_movie(message: types.Message):
             chat_id=message.from_user.id,
             from_chat_id=int(it["channel_id"]),
             message_id=int(it["message_id"]),
-            ttl_sec=6 * 60 * 60,
+            ttl_sec=TTL,
             protect=True,
             disable_notification=True,
         )
 
         if not ok:
+            await message.answer(f"⏳ Bu kino {TTL} soatdan keyin o‘chiriladi")
+        else:
             await delete_movie_by_message_id(
                 message_id=int(it["message_id"]),
                 channel_id=int(it["channel_id"]),
@@ -139,6 +142,7 @@ async def search_movie(message: types.Message):
 
     await message.answer(
         f"🎬 Topildi: {len(items)} ta (1/{total_pages})",
+        f"⏳ Har bir kino {TTL_HOURS} soatdan keyin o‘chiriladi",
         reply_markup=build_keyboard(token, 0, items)
     )
 

@@ -8,10 +8,10 @@ from typing import Set
 from aiogram import Router, F, types
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.exceptions import TelegramForbiddenError, TelegramBadRequest
-
+from db.core import get_pool
 from db.access import grant_access  # grant_access(user_id:int, days:int)
 from db.users import upsert_user  # upsert_user(user_id, username, full_name) - agar sendan async bo'lsa
-
+from typing import Optional, List, Dict, Any
 router = Router()
 logger = logging.getLogger(__name__)
 
@@ -22,6 +22,17 @@ ADMIN_IDS: Set[int] = {7040085454,8443292780}
 _REQ_COOLDOWN_SEC = 30
 _LAST_REQ: dict[int, float] = {}
 
+
+async def is_user_active(user_id: int) -> bool:
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        res = await conn.fetchval(
+            "SELECT expires_at FROM user_access WHERE user_id=$1",
+            user_id
+        )
+        if res and res > int(time.time()):
+            return True
+        return False
 
 def _can_request(user_id: int) -> bool:
     now = time.time()
@@ -86,58 +97,59 @@ async def access_request(call: types.CallbackQuery):
 
 @router.callback_query(F.data.startswith("access:approve:"))
 async def access_approve(call: types.CallbackQuery):
-    # callback_data: access:approve:{user_id}:{days}
+
     parts = (call.data or "").split(":")
     if len(parts) != 4:
         await call.answer("❌ Noto‘g‘ri callback.", show_alert=True)
         return
 
-    _, action, user_id_s, days_s = parts
-    if action != "approve":
-        await call.answer()
-        return
+    _, _, user_id_s, days_s = parts
 
     admin_id = int(call.from_user.id)
     if admin_id not in ADMIN_IDS:
         await call.answer("⛔ Siz admin emassiz.", show_alert=True)
         return
 
-    try:
-        user_id = int(user_id_s)
-        days = int(days_s)
-    except ValueError:
-        await call.answer("❌ Parametr xato.", show_alert=True)
+    user_id = int(user_id_s)
+    days = int(days_s)
+
+    # 🔥 MUHIM: SAFE FUNCTION
+    success = await grant_access(user_id, days, admin_id)
+
+    if not success:
+        await call.answer("⚠️ Bu user allaqachon tasdiqlangan!", show_alert=True)
         return
 
-    # DB ga yozamiz
-    try:
-        await grant_access(user_id, days=days)
-    except Exception:
-        logger.exception("grant_access failed")
-        await call.answer("❌ DB xato. Keyinroq urinib ko‘ring.", show_alert=True)
-        return
-
-    # Userga xabar
+    # USERGA XABAR
     try:
         await call.bot.send_message(
             chat_id=user_id,
-            text=f"✅ Sizga {days} kunlik obuna tayinlandi.\n\nBotdan foydalanishingiz mumkin 🎬",
+            text=f"✅ Sizga {days} kunlik obuna berildi 🎬"
         )
-    except TelegramForbiddenError:
-        # user botni block qilgan
+    except:
         pass
-    except TelegramBadRequest:
-        pass
-    except Exception:
-        logger.exception("Failed to notify user about approval")
 
-    # Adminga tasdiq
+    # ADMIN LOG
+    text = (
+        f"✅ RUXSAT BERILDI\n\n"
+        f"👤 User: {user_id}\n"
+        f"👮 Admin: {admin_id}\n"
+        f"📅 Kun: {days}"
+    )
+
+    for aid in ADMIN_IDS:
+        try:
+            await call.bot.send_message(aid, text)
+        except:
+            pass
+
+    # tugmalarni o‘chiramiz
     try:
         await call.message.edit_reply_markup(reply_markup=None)
-    except Exception:
+    except:
         pass
 
-    await call.answer(f"✅ {days} kun berildi.", show_alert=True)
+    await call.answer("✅ Tasdiqlandi", show_alert=True)
 
 
 @router.callback_query(F.data.startswith("access:reject:"))
@@ -186,7 +198,7 @@ async def list_active_users_with_profiles(*, limit: int = 5000, now: Optional[in
         import time
         now = int(time.time())
 
-    pool = get_pool()
+    pool = await get_pool()
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """

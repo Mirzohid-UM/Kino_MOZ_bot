@@ -1,35 +1,25 @@
-import asyncpg
+from __future__ import annotations
+
 import time
+from db.core import get_pool
 
-_pool = None
-
-async def get_pool():
-    global _pool
-    if _pool is None:
-        _pool = await asyncpg.create_pool(
-            user='username', password='password',
-            database='db_name', host='localhost'
-        )
-    return _pool
 
 async def get_today_stats():
-    pool = await get_pool()  # <-- bu yerda await kerak
+    pool = await get_pool()
     today_start = int(time.time()) - (int(time.time()) % 86400)
 
     async with pool.acquire() as conn:
-        # yangi userlar
+
         new_users = await conn.fetchval(
             "SELECT COUNT(*) FROM users WHERE created_at >= $1",
             today_start
         )
 
-        # bloklanganlar
         blocked = await conn.fetchval(
             "SELECT COUNT(*) FROM users WHERE blocked = TRUE AND updated_at >= $1",
             today_start
         )
 
-        # obuna tugaganlar
         expired = await conn.fetchval(
             """
             SELECT COUNT(*) FROM user_access
@@ -39,7 +29,6 @@ async def get_today_stats():
             today_start
         )
 
-        # nechta grant bo‘lgan
         grants = await conn.fetchval(
             """
             SELECT COUNT(*) FROM audit
@@ -48,7 +37,6 @@ async def get_today_stats():
             today_start
         )
 
-        # jami berilgan kunlar
         total_days = await conn.fetchval(
             """
             SELECT COALESCE(SUM((meta->>'days')::int),0)

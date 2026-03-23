@@ -32,6 +32,7 @@ broadcast_mode: dict[int, str] = {}  # user_id -> broadcast mode
 ADMIN_IDS = {7040085454,8443292780}
 
 # ----------------------------
+
 # INLINE KEYBOARDS
 # ----------------------------
 def admin_kb():
